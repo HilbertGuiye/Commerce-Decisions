@@ -3,6 +3,51 @@
   const R=window.GameRules, DECK=window.DECK, STORAGE='commerce-decisions-v2';
   const $=id=>document.getElementById(id), stage=$('stage'), viewport=$('viewport');
   let state=restore(), reading=matchMedia('(max-width: 650px) and (orientation: portrait)').matches, modalReturn=null;
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)'), elementAnimations=new WeakMap(), activeAnimations=new Set();
+  const supportsLayoutZoom=window.CSS?.supports?.('zoom','1')===true;
+  let renderedSlide=null, renderRevision=0, layoutFrame=0;
+  function animateFeedback(element,keyframes,duration=160){
+    if(!element)return;
+    elementAnimations.get(element)?.cancel();
+    if(reducedMotion.matches||typeof element.animate!=='function')return;
+    try{
+      const animation=element.animate(keyframes,{duration,easing:'ease-out'});
+      elementAnimations.set(element,animation);activeAnimations.add(animation);
+      const release=()=>{activeAnimations.delete(animation);if(elementAnimations.get(element)===animation)elementAnimations.delete(element);};
+      animation.onfinish=release;animation.oncancel=release;
+    }catch{}
+  }
+  function cancelMotion(){if(reducedMotion.matches)for(const animation of activeAnimations)animation.cancel();}
+  if(reducedMotion.addEventListener)reducedMotion.addEventListener('change',cancelMotion);else reducedMotion.addListener?.(cancelMotion);
+  // Recover from stale browser hit regions using each control's current screen bounds.
+  // Keyboard activation remains native; an open dialog owns all pointer interaction.
+  function controlAtPoint(x,y){
+    const bounds=viewport.getBoundingClientRect();
+    if(x<bounds.left||x>=bounds.right||y<bounds.top||y>=bounds.bottom)return null;
+    const candidates=[...stage.querySelectorAll('button,input,textarea')].reverse();
+    const layer=control=>Number(getComputedStyle(control.closest('.ending-actions,.calculation,.text-shape,.hotspot')||control).zIndex)||0;
+    candidates.sort((a,b)=>layer(b)-layer(a));
+    return candidates.find(control=>{
+      if(control.disabled)return false;
+      const css=getComputedStyle(control);
+      if(css.visibility!=='visible'||css.pointerEvents==='none')return false;
+      return [...control.getClientRects()].some(r=>r.width>0&&r.height>0&&x>=r.left&&x<r.right&&y>=r.top&&y<r.bottom);
+    })||null;
+  }
+  document.addEventListener('click',event=>{
+    if(event.detail===0||event.button!==0||$('modal').open)return;
+    const control=controlAtPoint(event.clientX,event.clientY);
+    const nativeControl=event.target.closest?.('button,input,textarea');
+    if(control===nativeControl||(!control&&!stage.contains(nativeControl)))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    if(control){
+      control.focus({preventScroll:true});
+      // .click() has detail 0, so this recovery never forwards a choice twice.
+      if(control.tagName==='BUTTON')control.click();
+    }
+  },true);
+  // Feedback never delays a choice or disables navigation.
+  document.addEventListener('click',event=>{const button=event.target.closest?.('button');if(button&&!button.disabled&&!stage.contains(button))animateFeedback(button,[{transform:'scale(.98)'},{transform:'scale(1)'}],140);},true);
   const labels={1:'Introduction',2:'Your football goal',3:'A competing want',4:'School contribution',5:'Choose your income strategy',6:'Save your weekly money',7:'Choose a school job',8:'Choose a school job',9:'Job application',10:'Job application',11:'Choose your work schedule',12:'Choose your work schedule',13:'Job application',14:'Job application',15:'Job earnings',16:'Job application',17:'Job application',18:'Job earnings',19:'Checkpoint: Week 3',20:'Choose what to sell',21:'Choose what to sell',22:'Plan your strategy',23:'GTA VI decision',24:'Your broken phone',25:'Your broken phone',26:'Authorised repair',27:'Authorised repair',28:'Local repair',29:'Local repair',48:'School job application guide',49:'School job application guide'};
   const money=n=>'$'+n;
   function restore(){try{const v=JSON.parse(sessionStorage.getItem(STORAGE));if(v&&Number.isInteger(v.slide)&&v.slide>=1&&v.slide<=49&&R.JOBS[v.job]&&['Official','Local','Broken'].includes(v.phone)&&v.sold&&['clothing','comics','games'].every(k=>typeof v.sold[k]==='boolean')&&typeof v.boughtGTA==='boolean')return Object.assign(R.initial(),v);}catch{}return R.initial();}
@@ -42,7 +87,7 @@
   };
   function dispatch(a){if(a?.go)go(a.go);else if(a?.macro)actions[a.macro]?.();}
   function repair(phone){if(!R.repair(state,phone)){notEnough(R.COST[phone],phone==='Official'?'The authorised repair':'The local repair');return;}save();render();}
-  function toggle(k){R.toggle(state,k);save();updateMerch();announce(`${k==='games'?'Old video games':k==='comics'?'Old comics':'Old clothing'} ${state.sold[k]?'selected':'deselected'}.`);}
+  function toggle(k){R.toggle(state,k);save();updateMerch();animateFeedback(stage.querySelector('.merch-summary'),[{opacity:.45},{opacity:1}]);announce(`${k==='games'?'Old video games':k==='comics'?'Old comics':'Old clothing'} ${state.sold[k]?'selected':'deselected'}.`);}
   function updateMerch(){const map={ToggleClothing:'clothing',ToggleComics:'comics',ToggleGames:'games'};stage.querySelectorAll('[data-macro]').forEach(b=>{const k=map[b.dataset.macro];if(k){b.classList.toggle('selected',state.sold[k]);b.setAttribute('aria-pressed',String(state.sold[k]));}});const s=stage.querySelector('.merch-summary');if(s)s.textContent=`Selected sales: ${money(R.merchIncome(state))}`;}
   function plain(item){return(item.paragraphs||[]).map(p=>p.runs.map(r=>r.text).join('')).join('\n').trim();}
   function setBox(node,item){Object.assign(node.style,{left:item.x+'px',top:item.y+'px',width:item.w+'px',height:item.h+'px'});}
@@ -75,8 +120,8 @@
     const bs=node('div','calc-buttons');const check=node('button','','Check my calculation');check.type='submit';const choices=node('button','secondary','Review my choices');choices.type='button';choices.onclick=()=>showModal('Your choices',reference(),[['Return to my calculations']]);bs.append(check,choices);c.append(bs);const feedback=node('p','calc-feedback');feedback.id='calcFeedback';feedback.setAttribute('role','status');c.append(feedback);stage.append(c);if((final?['final']:['job','merch','week3']).some(k=>k in state.checked))paintCheck(false);
   }
   function checkAnswers(announceResult=true){const expected=state.slide===19?{job:R.jobIncome(state),merch:R.merchIncome(state),week3:R.week3(state)}:{final:R.final(state)};let all=true,missing=false;for(const [k,v]of Object.entries(expected)){const value=String(state.answers[k]??'').trim();state.checked[k]=value!==''&&Number(value)===v;if(!value)missing=true;if(!state.checked[k])all=false;}save();paintCheck(announceResult,missing);if(announceResult)window.GameAudio?.feedback(all);return all;}
-  function paintCheck(speak,missing=false){const inputs=[...stage.querySelectorAll('[data-answer]')];inputs.forEach(input=>{const k=input.dataset.answer;if(k in state.checked){input.classList.toggle('good',state.checked[k]);input.classList.toggle('bad',!state.checked[k]);input.setAttribute('aria-invalid',String(!state.checked[k]));}});const keys=inputs.map(n=>n.dataset.answer);const all=keys.every(k=>state.checked[k]);const text=all?'Your calculation is correct. Continue when you are ready.':missing?'Enter an amount in each box, then check again.':'Recheck the highlighted amounts. Use “Review my choices” to check the income and costs.';if($('calcFeedback'))$('calcFeedback').textContent=text;if(speak)announce(text);}
-  function render(){const slide=DECK[state.slide-1];stage.replaceChildren();document.body.classList.toggle('reading',reading);$('readingBtn').setAttribute('aria-pressed',String(reading));$('sceneLabel').textContent=labels[state.slide]||(state.slide<=35?'Final financial position':`Ending ${state.slide-35}`);const bg=document.createElement('img');bg.className='slide-bg';bg.alt='';bg.src=`assets/slides/slide-${String(state.slide).padStart(2,'0')}.jpg`;bg.draggable=false;stage.append(bg);
+  function paintCheck(speak,missing=false){const inputs=[...stage.querySelectorAll('[data-answer]')];inputs.forEach(input=>{const k=input.dataset.answer;if(k in state.checked){input.classList.toggle('good',state.checked[k]);input.classList.toggle('bad',!state.checked[k]);input.setAttribute('aria-invalid',String(!state.checked[k]));}});const keys=inputs.map(n=>n.dataset.answer);const all=keys.every(k=>state.checked[k]);const text=all?'Your calculation is correct. Continue when you are ready.':missing?'Enter an amount in each box, then check again.':'Recheck the highlighted amounts. Use “Review my choices” to check the income and costs.';const feedback=$('calcFeedback');if(feedback){feedback.textContent=text;feedback.classList.toggle('needs-review',!all);if(speak)animateFeedback(feedback,[{opacity:0},{opacity:1}],180);}if(speak)announce(text);}
+  function render(){const revision=++renderRevision,sceneChanged=renderedSlide!==state.slide;renderedSlide=state.slide;for(const animation of activeAnimations){const target=animation.effect?.target;if(target&&stage.contains(target))animation.cancel();}const slide=DECK[state.slide-1];stage.replaceChildren();document.body.classList.toggle('reading',reading);$('readingBtn').setAttribute('aria-pressed',String(reading));$('sceneLabel').textContent=labels[state.slide]||(state.slide<=35?'Final financial position':`Ending ${state.slide-35}`);const bg=document.createElement('img');bg.className='slide-bg';bg.alt='';bg.src=`assets/slides/slide-${String(state.slide).padStart(2,'0')}.jpg`;bg.draggable=false;stage.append(bg);
     for(let item of slide.items){const t=plain(item);if(state.slide===19&&t.startsWith('Calculate your Week 3'))continue;if(state.slide>=30&&state.slide<=35&&(t.startsWith('Calculate your Week 6')||t==='Show your working first'))continue;
       if((state.slide===42||state.slide===43)&&t!=='Ending'){
         const positions=t.includes('Your friends')?[335,35,290,90,23]:t.includes('teammates')?[110,505,290,105,21]:t.includes('phone')?[1280,30,290,125,23]:[1090,760,445,60,24];
@@ -93,10 +138,19 @@
     if(state.slide===20||state.slide===21){stage.append(node('div','merch-summary'));updateMerch();}
     if(state.slide>=36&&state.slide<=47){const balance=R.final(state),boots=balance>=200;stage.append(node('div','ending-balance',boots?`Before boots: ${money(balance)} · After boots: ${money(balance-200)}`:`Balance: ${money(balance)} · Boots need $200`));const b=node('div','ending-actions');const play=node('button','','Play again');play.onclick=start;const review=node('button','','Review my decisions');review.onclick=showReview;b.append(play,review);stage.append(b);}
     $('stageHint').textContent=state.slide===19||(state.slide>=30&&state.slide<=35)?'Calculate here or on your worksheet. Checking your answer is optional.':state.slide>=36&&state.slide<=47?'Discuss how your choices affected the outcome.':'Click the choices in the picture. Use Tab and Enter to play with a keyboard.';
-    resize();requestAnimationFrame(()=>{fitText();announce($('sceneLabel').textContent);});preload();
+    resize();requestAnimationFrame(()=>{if(revision!==renderRevision)return;fitText();if(sceneChanged)animateFeedback(bg,[{opacity:.2},{opacity:1}],200);announce($('sceneLabel').textContent);});preload();
   }
   function preload(){const targets=new Set();for(const it of DECK[state.slide-1].items){if(it.action?.go)targets.add(it.action.go);for(const p of it.paragraphs||[])for(const r of p.runs)if(r.action?.go)targets.add(r.action.go);}if(state.slide<4)targets.add(state.slide+1);for(const n of targets){const im=new Image();im.src=`assets/slides/slide-${String(n).padStart(2,'0')}.jpg`;}}
-  function resize(){if(reading){viewport.style.height='auto';stage.style.transform='none';return;}const scale=viewport.clientWidth/1600;viewport.style.height=(900*scale)+'px';stage.style.transform=`scale(${scale})`;}
+  function resize(){
+    if(reading){viewport.style.height='auto';stage.style.zoom='1';stage.style.transform='none';return;}
+    const width=parseFloat(getComputedStyle(viewport).width)||viewport.clientWidth;
+    if(!Number.isFinite(width)||width<=0)return;
+    const scale=width/1600;viewport.style.height=(900*scale)+'px';
+    // Layout zoom keeps painted controls and native hit testing in one coordinate system.
+    if(supportsLayoutZoom){stage.style.zoom=String(scale);stage.style.transform='none';}
+    else{stage.style.zoom='1';stage.style.transform=`scale(${scale})`;}
+  }
+  function scheduleLayout(){if(layoutFrame)return;layoutFrame=requestAnimationFrame(()=>{layoutFrame=0;resize();});}
   function showReview(){const body=node('div');body.append(reference());body.append(node('p','result-summary',`Week 6: ${money(R.jobIncome(state))} + ${money(R.merchIncome(state))} + $210 − ${money(state.boughtGTA?150:0)} − ${money(R.COST[state.phone])} = ${money(R.final(state))}.`));if(state.answers.final!==undefined)body.append(node('p','',`Your Week 6 answer: ${money(state.answers.final)}.`));if(state.working)body.append(node('p','',`Your working: ${state.working}`));body.append(node('p','','Which choice mattered most? What did you give up, and would you make the same decisions again?'));showModal('Review your decisions',body,[['Return to my ending']]);}
   $('helpBtn').onclick=()=>{
     $('modal').classList.add('help-modal');
@@ -108,6 +162,15 @@
   $('readingBtn').onclick=()=>{reading=!reading;render();};
   $('restartBtn').onclick=()=>showModal('Restart the activity?','This clears the choices and calculations in your current game.',[['Restart from the introduction',()=>{state=R.initial();save();render();}],['Keep playing',null,true]]);
   $('fullscreenBtn').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();else showModal('Fullscreen','Use your browser’s fullscreen command, or switch to Reading view for a larger text layout.',[['Return to the activity']]);}catch{showModal('Fullscreen','Your browser did not allow fullscreen. You can continue playing in this window.',[['Return to the activity']]);}};
-  window.addEventListener('resize',resize);document.addEventListener('fullscreenchange',resize);
+  // Container changes (including scrollbars) need not emit a window resize event.
+  if(typeof ResizeObserver==='function'){
+    let lastWidth=-1;
+    const observer=new ResizeObserver(entries=>{const width=entries[0]?.contentRect.width;if(Number.isFinite(width)&&Math.abs(width-lastWidth)>.05){lastWidth=width;scheduleLayout();}});
+    observer.observe(viewport);
+  }
+  window.addEventListener('resize',scheduleLayout);document.addEventListener('fullscreenchange',scheduleLayout);
+  window.visualViewport?.addEventListener('resize',scheduleLayout);
+  window.addEventListener('pageshow',scheduleLayout);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){for(const animation of activeAnimations)animation.cancel();}else scheduleLayout();});
   render();
 })();
