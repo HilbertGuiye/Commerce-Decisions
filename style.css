@@ -32,6 +32,35 @@ html{scrollbar-gutter:stable}
 @supports not (scrollbar-gutter:stable){html{overflow-y:scroll}}
 .stage button:active{transform:none;box-shadow:inset 0 0 0 3px #3185ed}
 .reading .stage{zoom:1}
+/* One shared application view, with each route's existing game state retained. */
+.application-stage .slide-bg{opacity:.18}
+.application-form{position:absolute;left:120px;top:40px;width:1360px;padding:28px 36px;background:rgba(255,255,255,.96);color:#172c43;border:2px solid #b6c7d8;border-radius:18px;box-shadow:0 12px 36px #12203426;z-index:4;color-scheme:light}
+.application-form h2{font-size:38px;margin:0 0 10px}
+.application-intro{font-size:24px;margin:0 0 12px;line-height:1.4}
+.application-job-details{font-size:22px;margin:0 0 18px;padding:10px 16px;border-radius:8px;background:#edf4fa;line-height:1.4}
+.application-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+.application-field{display:flex;flex-direction:column;gap:8px;font-size:22px;line-height:1.3;min-width:0}
+.application-field input,.application-field textarea{width:100%;border:2px solid #70899d;border-radius:7px;background:#fff;color:#172c43;padding:10px 14px;font-size:22px}
+.application-field input[readonly]{background:#edf2f7;color:#35516f}
+.application-field textarea{height:120px;resize:none;line-height:1.4}
+.application-footer{margin-top:22px}
+.application-footer p{font-size:20px;line-height:1.4;margin:0 0 18px}
+.application-buttons{display:flex;justify-content:space-between;gap:18px}
+.application-buttons button{border:2px solid #183b5d;border-radius:8px;background:#183b5d;color:#fff;padding:14px 22px;font-size:25px}
+.application-buttons button.secondary{background:#fff;color:#183b5d}
+.application-buttons button:hover{box-shadow:0 0 0 3px #3185ed55}
+/* Raise the result action into the clear area beside the calculation form. */
+.result-continue{position:absolute;left:1110px;top:355px;width:400px;min-height:110px;z-index:5;padding:20px 26px;border:2px solid #55708c;border-radius:14px;background:rgba(255,255,255,.88);color:#183b5d;font-size:31px;font-weight:700;line-height:1.3;box-shadow:0 8px 24px #12203426}
+.result-continue:hover{background:rgba(255,255,255,.97);border-color:#1267bb;box-shadow:0 8px 24px #12203438}
+.reading .application-form{position:relative;left:auto;top:auto;width:100%;padding:22px;order:0}
+.reading .application-stage .slide-bg{display:none}
+.reading .application-form h2{font-size:27px}
+.reading .application-intro,.reading .application-field,.reading .application-field input,.reading .application-field textarea{font-size:18px}
+.reading .application-job-details,.reading .application-footer p{font-size:16px}
+.reading .application-buttons{flex-wrap:wrap}
+.reading .application-buttons button{font-size:18px}
+.reading .result-continue{position:relative;left:auto;top:auto;width:100%;min-height:0;padding:16px 20px;font-size:20px;margin-top:8px}
+@media(max-width:650px){.reading .application-grid{grid-template-columns:1fr}.reading .application-form{padding:18px}.reading .application-buttons{flex-direction:column}.reading .application-field textarea{height:130px}}
 @media(prefers-reduced-motion:reduce){
   nav button,.audio-bar button,.run-link,.hotspot,.calc-buttons button,.ending-actions button,.modal-actions button,.calculation input{transition:none}
 }

@@ -50,6 +50,17 @@
   document.addEventListener('click',event=>{const button=event.target.closest?.('button');if(button&&!button.disabled&&!stage.contains(button))animateFeedback(button,[{transform:'scale(.98)'},{transform:'scale(1)'}],140);},true);
   const labels={1:'Introduction',2:'Your football goal',3:'A competing want',4:'School contribution',5:'Choose your income strategy',6:'Save your weekly money',7:'Choose a school job',8:'Choose a school job',9:'Job application',10:'Job application',11:'Choose your work schedule',12:'Choose your work schedule',13:'Job application',14:'Job application',15:'Job earnings',16:'Job application',17:'Job application',18:'Job earnings',19:'Checkpoint: Week 3',20:'Choose what to sell',21:'Choose what to sell',22:'Plan your strategy',23:'GTA VI decision',24:'Your broken phone',25:'Your broken phone',26:'Authorised repair',27:'Authorised repair',28:'Local repair',29:'Local repair',48:'School job application guide',49:'School job application guide'};
   const money=n=>'$'+n;
+  // Keep the original slide numbers and rules; an application is an extra view
+  // between each job description and its existing congratulations scene.
+  const applications={
+    9:{job:'Job 1: Cleaning the toilets',next:11,time:'Monday–Friday, after school. Football training: Tuesday and Thursday.'},
+    10:{job:'Job 1: Cleaning the toilets',next:12,time:'Monday–Friday, after school. Football training: Tuesday and Thursday.'},
+    13:{job:'Job 2: Garbage collection',next:15,time:'Monday–Friday, after school.'},
+    14:{job:'Job 2: Garbage collection',next:15,time:'Monday–Friday, after school.'},
+    16:{job:'Job 3: Book hire',next:18,time:'Weekends, 4 hours per day.'},
+    17:{job:'Job 3: Book hire',next:18,time:'Weekends, 4 hours per day.'}
+  };
+  function currentApplication(){const a=state.application;return a&&applications[a.source]&&a.draft&&typeof a.draft==='object'?a:null;}
   function restore(){try{const v=JSON.parse(sessionStorage.getItem(STORAGE));if(v&&Number.isInteger(v.slide)&&v.slide>=1&&v.slide<=49&&R.JOBS[v.job]&&['Official','Local','Broken'].includes(v.phone)&&v.sold&&['clothing','comics','games'].every(k=>typeof v.sold[k]==='boolean')&&typeof v.boughtGTA==='boolean')return Object.assign(R.initial(),v);}catch{}return R.initial();}
   function save(){try{sessionStorage.setItem(STORAGE,JSON.stringify(state));}catch{}}
   function announce(t){$('liveStatus').textContent=t;}
@@ -61,8 +72,8 @@
   $('modal').addEventListener('close',()=>{$('modal').classList.remove('help-modal');$('modalTitle').removeAttribute('tabindex');if(modalReturn?.isConnected)modalReturn.focus();});
   function notEnough(cost,name){window.GameAudio?.warn();showModal('Not enough money',`You currently have ${money(R.available(state))}. ${name} costs ${money(cost)}. Choose a different option.`,[['Back to my choices']]);}
   function chooseJob(next){showModal('Choose the Job 1 schedule','Cleaning toilets pays $15 a day. Working on Tuesday and Thursday means missing football training.',[
-    ['Work every weekday: $15 × 5 × 3 = $225',()=>{state.job='toiletsFull';go(next);}],
-    ['Keep Tuesday and Thursday training: $15 × 3 × 3 = $135',()=>{state.job='toiletsTraining';go(next);}],
+    ['Work every weekday: $15 × 5 × 3',()=>{state.job='toiletsFull';go(next);}],
+    ['Keep Tuesday and Thursday training: $15 × 3 × 3',()=>{state.job='toiletsTraining';go(next);}],
     ['Return to the activity',null,true]
   ]);}
   function continueWithWork(next){const final=state.slide>=30&&state.slide<=35;const names=final?['final']:['job','merch','week3'];const complete=names.every(k=>String(state.answers[k]??'').trim()!=='');
@@ -85,7 +96,19 @@
     FinalBrokenGTA:()=>repair('Broken'),FinalBrokenNoGTA:()=>repair('Broken'),
     ShowEnding:()=>{const ending=R.ending(state);state.ending=ending;continueWithWork(ending);}
   };
-  function dispatch(a){if(a?.go)go(a.go);else if(a?.macro)actions[a.macro]?.();}
+  function dispatch(a){
+    const route=applications[state.slide];
+    if(route&&(a?.go===route.next||(state.slide===14&&a?.macro==='SetJob2Combined')||(state.slide===17&&a?.macro==='SetJob3Combined'))){openApplication();return;}
+    const application=currentApplication();
+    if(application?.submitted&&state.slide===15&&application.source===14&&a?.macro==='SetJob2Only'){actions.SetJob2Combined();return;}
+    if(application?.submitted&&state.slide===18&&application.source===17&&a?.macro==='SetJob3Only'){actions.SetJob3Combined();return;}
+    if(a?.go)go(a.go);else if(a?.macro)actions[a.macro]?.();
+  }
+  function openApplication(){
+    const previous=currentApplication();
+    state.application={source:state.slide,open:true,submitted:false,draft:previous?.source===state.slide?previous.draft:{}};
+    save();render();stage.querySelector('[name="appName"]')?.focus({preventScroll:true});
+  }
   function repair(phone){if(!R.repair(state,phone)){notEnough(R.COST[phone],phone==='Official'?'The authorised repair':'The local repair');return;}save();render();}
   function toggle(k){R.toggle(state,k);save();updateMerch();animateFeedback(stage.querySelector('.merch-summary'),[{opacity:.45},{opacity:1}]);announce(`${k==='games'?'Old video games':k==='comics'?'Old comics':'Old clothing'} ${state.sold[k]?'selected':'deselected'}.`);}
   function updateMerch(){const map={ToggleClothing:'clothing',ToggleComics:'comics',ToggleGames:'games'};stage.querySelectorAll('[data-macro]').forEach(b=>{const k=map[b.dataset.macro];if(k){b.classList.toggle('selected',state.sold[k]);b.setAttribute('aria-pressed',String(state.sold[k]));}});const s=stage.querySelector('.merch-summary');if(s)s.textContent=`Selected sales: ${money(R.merchIncome(state))}`;}
@@ -112,6 +135,38 @@
   function fitText(){if(reading)return;for(const box of stage.querySelectorAll('.text-shape')){const c=box.querySelector('.shape-content'),pad=getComputedStyle(box);const avail=box.clientHeight-parseFloat(pad.paddingTop)-parseFloat(pad.paddingBottom);const width=box.clientWidth-parseFloat(pad.paddingLeft)-parseFloat(pad.paddingRight);c.style.transform='';c.style.width='100%';if(c.scrollHeight<=avail&&c.scrollWidth<=width)continue;let low=.1,high=1;for(let i=0;i<14;i++){const scale=(low+high)/2;c.style.width=(100/scale)+'%';if(c.scrollHeight*scale<=avail&&c.scrollWidth*scale<=width+.5)low=scale;else high=scale;}c.style.width=(100/low)+'%';c.style.transform=`scale(${low})`;
     }}
   function node(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
+  function addApplication(application){
+    const route=applications[application.source],form=node('form','application-form');
+    form.setAttribute('aria-labelledby','applicationTitle');
+    const heading=node('h2','','School job application');heading.id='applicationTitle';form.append(heading);
+    form.append(node('p','application-intro','Apply to the Principal. Complete every field, then submit to continue.'));
+    form.append(node('p','application-job-details',`${route.job} · ${route.time}`));
+    const grid=node('div','application-grid');
+    const fields=[['appName','Student name','input'],['appClass','Class','input'],['appJob','Job applied for','input'],['appTime','When can you work?','input'],['appReason','Why are you applying for this job?','textarea'],['appStrengths','What strengths would you bring to this job?','textarea']];
+    for(const [key,label,tag]of fields){
+      const row=node('label','application-field'),caption=node('span','',label+' *'),input=document.createElement(tag);
+      input.name=key;input.required=true;input.maxLength=tag==='textarea'?1500:120;
+      if(tag==='input')input.type='text';
+      input.value=key==='appJob'?route.job:String(application.draft[key]??'');
+      if(key==='appJob')input.readOnly=true;
+      if(key==='appName'||key==='appClass')input.autocomplete='off';
+      input.oninput=()=>{input.setCustomValidity('');application.draft[key]=input.value;save();};
+      caption.append(node('span','sr-only',' (required)'));row.append(caption,input);grid.append(row);
+    }
+    form.append(grid);
+    const footer=node('div','application-footer');
+    footer.append(node('p','','* Required fields. This is a practice application; your answers are not graded.'));
+    const buttons=node('div','application-buttons'),back=node('button','secondary','Back to job details'),submit=node('button','','Submit application');
+    back.type='button';back.onclick=()=>{application.open=false;save();render();};submit.type='submit';buttons.append(back,submit);footer.append(buttons);form.append(footer);
+    form.onsubmit=event=>{
+      event.preventDefault();
+      for(const input of form.querySelectorAll('input,textarea'))input.setCustomValidity(input.value.trim()?'':'Please complete this field.');
+      if(!form.reportValidity())return;
+      application.open=false;application.submitted=true;go(route.next);
+    };
+    stage.append(form);
+  }
+  function addResultButton(){const b=node('button','result-continue','Continue to your result…');b.type='button';b.dataset.macro='ShowEnding';b.dataset.action='ShowEnding';b.onclick=actions.ShowEnding;stage.append(b);}
   function answerInput(k,label,parent){const row=node('label','',label+' $');const input=document.createElement('input');input.type='number';input.min='0';input.step='1';input.inputMode='numeric';input.dataset.answer=k;input.name=k;input.setAttribute('aria-label',label);input.value=state.answers[k]??'';input.oninput=()=>{state.answers[k]=input.value;delete state.checked[k];input.classList.remove('good','bad');save();};row.append(input);parent.append(row);return input;}
   function reference(){const list=node('ul','choice-list');list.append(node('li','',`School job: ${R.JOBS[state.job].name}${R.JOBS[state.job].working?' ('+R.JOBS[state.job].working+')':''}`));list.append(node('li','',`Items sold: ${['clothing','comics','games'].filter(k=>state.sold[k]).map(k=>({clothing:'Old clothing ($40)',comics:'Old comics ($25)',games:'Old video games ($60)'}[k])).join(', ')||'None'}`));list.append(node('li','',`Weekly money: $35. Week 3: 3 payments. Week 6: 6 payments.`));if(state.slide>=24&&state.slide!==48&&state.slide!==49){list.append(node('li','',`GTA VI: ${state.boughtGTA?'Purchased ($150)':'Not purchased ($0)'}`));if(state.slide>=30&&state.slide<=47)list.append(node('li','',`Phone: ${({Official:'Authorised repair ($80), one-year warranty',Local:'Local repair ($50), no warranty',Broken:'Unrepaired ($0)'}[state.phone])}`));}return list;}
   function addCalculation(final){const c=node('form','calculation'+(final?' final-calculation':''));c.onsubmit=e=>{e.preventDefault();checkAnswers();};
@@ -122,7 +177,14 @@
   function checkAnswers(announceResult=true){const expected=state.slide===19?{job:R.jobIncome(state),merch:R.merchIncome(state),week3:R.week3(state)}:{final:R.final(state)};let all=true,missing=false;for(const [k,v]of Object.entries(expected)){const value=String(state.answers[k]??'').trim();state.checked[k]=value!==''&&Number(value)===v;if(!value)missing=true;if(!state.checked[k])all=false;}save();paintCheck(announceResult,missing);if(announceResult)window.GameAudio?.feedback(all);return all;}
   function paintCheck(speak,missing=false){const inputs=[...stage.querySelectorAll('[data-answer]')];inputs.forEach(input=>{const k=input.dataset.answer;if(k in state.checked){input.classList.toggle('good',state.checked[k]);input.classList.toggle('bad',!state.checked[k]);input.setAttribute('aria-invalid',String(!state.checked[k]));}});const keys=inputs.map(n=>n.dataset.answer);const all=keys.every(k=>state.checked[k]);const text=all?'Your calculation is correct. Continue when you are ready.':missing?'Enter an amount in each box, then check again.':'Recheck the highlighted amounts. Use “Review my choices” to check the income and costs.';const feedback=$('calcFeedback');if(feedback){feedback.textContent=text;feedback.classList.toggle('needs-review',!all);if(speak)animateFeedback(feedback,[{opacity:0},{opacity:1}],180);}if(speak)announce(text);}
   function render(){const revision=++renderRevision,sceneChanged=renderedSlide!==state.slide;renderedSlide=state.slide;for(const animation of activeAnimations){const target=animation.effect?.target;if(target&&stage.contains(target))animation.cancel();}const slide=DECK[state.slide-1];stage.replaceChildren();document.body.classList.toggle('reading',reading);$('readingBtn').setAttribute('aria-pressed',String(reading));$('sceneLabel').textContent=labels[state.slide]||(state.slide<=35?'Final financial position':`Ending ${state.slide-35}`);const bg=document.createElement('img');bg.className='slide-bg';bg.alt='';bg.src=`assets/slides/slide-${String(state.slide).padStart(2,'0')}.jpg`;bg.draggable=false;stage.append(bg);
-    for(let item of slide.items){const t=plain(item);if(state.slide===19&&t.startsWith('Calculate your Week 3'))continue;if(state.slide>=30&&state.slide<=35&&(t.startsWith('Calculate your Week 6')||t==='Show your working first'))continue;
+    const application=currentApplication();
+    if(application?.open&&application.source===state.slide){
+      stage.classList.add('application-stage');$('sceneLabel').textContent='School job application';addApplication(application);
+      $('stageHint').textContent='Complete all required fields. Your draft is kept in this browser tab.';
+      resize();announce('School job application');return;
+    }
+    stage.classList.remove('application-stage');
+    for(let item of slide.items){const t=plain(item);if(state.slide===19&&t.startsWith('Calculate your Week 3'))continue;if(state.slide>=30&&state.slide<=35&&(t.startsWith('Calculate your Week 6')||t==='Show your working first'||item.action?.macro==='ShowEnding'||item.paragraphs?.some(p=>p.runs.some(r=>r.action?.macro==='ShowEnding'))))continue;
       if((state.slide===42||state.slide===43)&&t!=='Ending'){
         const positions=t.includes('Your friends')?[335,35,290,90,23]:t.includes('teammates')?[110,505,290,105,21]:t.includes('phone')?[1280,30,290,125,23]:[1090,760,445,60,24];
         item={...item,x:positions[0],y:positions[1],w:positions[2],h:positions[3],padding:[4,4,4,4],paragraphs:item.paragraphs.map(p=>({...p,before:0,after:0,font:positions[4],runs:p.runs.map(r=>({...r,font:positions[4]}))}))};
@@ -131,10 +193,13 @@
         const texts=['The Principal decides to grant you this job.','You work this job for 3 full weeks.','or','You work each week except Tuesday and Thursday.','$15 × days per week × 3 = $_____'];
         item={...item,x:755,y:150,w:795,h:370,padding:[10,10,10,10],paragraphs:texts.map(text=>({align:'l',before:0,after:23,line:1.15,margin:0,indent:0,bullet:false,font:32,runs:[{text,font:32,color:'#000000',family:'Arial'}]}))};
       }
+      if(application?.submitted&&((state.slide===15&&application.source===14)||(state.slide===18&&application.source===17))){
+        item={...item,paragraphs:item.paragraphs?.map(p=>({...p,runs:p.runs.map(r=>r.action?.macro?{...r,text:r.text.replace('Continue…','Continue to merchant…')}:r)}))};
+      }
       if(item.paragraphs)renderText(item);
       else if(item.action){const b=node('button','hotspot','Continue');b.type='button';setBox(b,item);b.dataset.action=key(item.action);const other=slide.items.find(o=>o!==item&&o.paragraphs&&o.paragraphs.some(p=>p.runs.some(r=>same(r.action,item.action))));const label=other?plain(other):'Press anywhere to start';b.setAttribute('aria-label',label);b.textContent=label;b.onclick=()=>dispatch(item.action);if(other){b.classList.add('has-text');b.tabIndex=-1;b.setAttribute('aria-hidden','true');}stage.append(b);}
     }
-    if(state.slide===19)addCalculation(false);if(state.slide>=30&&state.slide<=35)addCalculation(true);
+    if(state.slide===19)addCalculation(false);if(state.slide>=30&&state.slide<=35){addCalculation(true);addResultButton();}
     if(state.slide===20||state.slide===21){stage.append(node('div','merch-summary'));updateMerch();}
     if(state.slide>=36&&state.slide<=47){const balance=R.final(state),boots=balance>=200;stage.append(node('div','ending-balance',boots?`Before boots: ${money(balance)} · After boots: ${money(balance-200)}`:`Balance: ${money(balance)} · Boots need $200`));const b=node('div','ending-actions');const play=node('button','','Play again');play.onclick=start;const review=node('button','','Review my decisions');review.onclick=showReview;b.append(play,review);stage.append(b);}
     $('stageHint').textContent=state.slide===19||(state.slide>=30&&state.slide<=35)?'Calculate here or on your worksheet. Checking your answer is optional.':state.slide>=36&&state.slide<=47?'Discuss how your choices affected the outcome.':'Click the choices in the picture. Use Tab and Enter to play with a keyboard.';

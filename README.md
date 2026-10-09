@@ -17,6 +17,7 @@ For a downloaded copy, keep the game files and `assets` folder together. You do 
 
 - **Choose an income strategy.** You can save your weekly money, apply for a school job, sell items, or combine the options offered.
 - **Read before choosing.** Compare the pay, time commitments, costs and repair conditions shown in the story.
+- **Practise applying for a job.** After choosing a school job, continue to the application form. Enter your name, class, availability, reason for applying and strengths. The selected job is filled in for you. Complete all required fields and select **Submit application** to continue to the congratulations page. The form is not graded; availability entered here does not change the game's work schedule or income. Your draft is kept in the current browser tab. It is not sent to a teacher or employer.
 - **Select items to sell.** Click an item to select it; click it again to remove it. You may select more than one item.
 - **Check your budget.** At the Week 3 and Week 6 checkpoints, calculate your balance and show your working.
 - **Make spending decisions.** Think about how buying GTA VI or repairing your phone will affect the money available for your football goal.
@@ -29,6 +30,8 @@ All prices and payments belong to the game's fictional scenario. Use the amounts
 Enter numbers in the answer boxes, then choose **Check my calculation** for feedback. If an amount is highlighted, review your income and spending, correct your answer and try again.
 
 Use **Review my choices** to see the information needed for your calculation. If you are working on a paper worksheet, complete your working there and select the worksheet option when continuing. Follow your teacher's instructions about recording or submitting your work.
+
+At the final checkpoint, select **Continue to your result…** to view your ending.
 
 ## Useful controls
 
